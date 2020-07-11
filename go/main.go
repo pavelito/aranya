@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -12,11 +13,30 @@ func main() {
 	start := time.Now()
 
 	stories := getNewStories()
-	for _, storyID := range stories {
-		story := getStoryDetails(storyID)
-		fmt.Println(story.Title)
-		countdown(story.Time)
+	const workers = 25
+
+	wg := new(sync.WaitGroup)
+	in := make(chan int, 2*workers)
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for storyID := range in {
+				story := getStoryDetails(storyID)
+				log.Println(story.Title)
+				go countdown(story.Time)
+			}
+		}()
 	}
+
+	for _, storyID := range stories {
+		in <- storyID
+	}
+
+	close(in)
+	wg.Wait()
+
 	elapsed := time.Since(start)
 	log.Printf("Total seconds to finish - %s", elapsed)
 }
@@ -32,7 +52,7 @@ func countdown(number int) {
 	for counter > 0 {
 		counter = counter - 1
 	}
-	println(fmt.Sprintf("Countdown done for %d", number))
+	log.Println(fmt.Sprintf("Countdown done for %d", number))
 }
 
 func getNewStories() []int {
@@ -46,9 +66,15 @@ func getNewStories() []int {
 
 func getStoryDetails(storyID int) storyDetail {
 	story := storyDetail{}
-	resp, _ := http.Get(fmt.Sprintf("https://hacker-news.firebaseio.com/v0/item/%d.json?print=pretty", storyID))
+	resp, err := http.Get(fmt.Sprintf("https://hacker-news.firebaseio.com/v0/item/%d.json?print=pretty", storyID))
+	if err != nil {
+		log.Fatal(err)
+		return storyDetail{}
+	}
+
 	defer resp.Body.Close()
 
 	json.NewDecoder(resp.Body).Decode(&story)
 	return story
+
 }
