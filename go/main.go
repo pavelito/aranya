@@ -3,16 +3,22 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"time"
 )
 
 func main() {
+	start := time.Now()
+
 	stories := getNewStories()
 	for _, storyID := range stories {
 		story := getStoryDetails(storyID)
 		fmt.Println(story.Title)
 		countdown(story.Time)
 	}
+	elapsed := time.Since(start)
+	log.Printf("Total seconds to finish - %s", elapsed)
 }
 
 type storyDetail struct {
