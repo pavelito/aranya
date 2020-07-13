@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -64,13 +65,21 @@ func isPrime(number int) bool {
 func processStory(in <-chan storyDetail) <-chan storyDetail {
 	out := make(chan storyDetail)
 	go func() {
+		wg := &sync.WaitGroup{}
 		for story := range in {
-			story.IsPrime = isPrime(story.ID)
-			out <- story
+			wg.Add(1)
+			go processStoryConcurrently(story, out, wg)
 		}
+		wg.Wait()
 		close(out)
 	}()
 	return out
+}
+
+func processStoryConcurrently(story storyDetail, output chan<- storyDetail, wg *sync.WaitGroup) {
+	story.IsPrime = isPrime(story.ID)
+	output <- story
+	wg.Done()
 }
 
 func main() {
