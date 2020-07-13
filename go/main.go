@@ -82,7 +82,7 @@ func isPrime(number int) bool {
 func processStory(in <-chan storyDetail) <-chan storyDetail {
 	out := make(chan storyDetail)
 	var wg sync.WaitGroup
-	const concurrency = 10 //Bounded Concurrency
+	const concurrency = 25 //Bounded Concurrency
 	wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
 		go func() {
@@ -111,7 +111,7 @@ func main() {
 	processedStories := processStory(storyDetails)
 
 	for story := range processedStories {
-		log.Println("%v", story)
+		log.Println(fmt.Sprintf("Story has title %s and ID is prime - %v", story.Title, story.IsPrime))
 	}
 	elapsed := time.Since(start)
 	log.Printf("Total seconds to finish - %s", elapsed)
