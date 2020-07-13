@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/big"
 	"net/http"
 	"time"
 )
@@ -13,9 +14,10 @@ import (
 //print doneIDs
 
 type storyDetail struct {
-	Title string `json:"title"`
-	ID    string `json:"id"`
-	Time  int    `json:"time"`
+	Title   string `json:"title"`
+	ID      int    `json:"id"`
+	Time    int    `json:"time"`
+	IsPrime bool   `json:"is_prime"`
 }
 
 func generateStoryIDs() <-chan int {
@@ -35,7 +37,7 @@ func generateStoryIDs() <-chan int {
 	return out
 }
 
-func processStory(in <-chan int) <-chan storyDetail {
+func getStoryDetail(in <-chan int) <-chan storyDetail {
 	out := make(chan storyDetail)
 	go func() {
 		for storyID := range in {
@@ -55,14 +57,31 @@ func processStory(in <-chan int) <-chan storyDetail {
 	return out
 }
 
+func isPrime(number int) bool {
+	return big.NewInt(int64(number)).ProbablyPrime(number)
+}
+
+func processStory(in <-chan storyDetail) <-chan storyDetail {
+	out := make(chan storyDetail)
+	go func() {
+		for story := range in {
+			story.IsPrime = isPrime(story.ID)
+			out <- story
+		}
+		close(out)
+	}()
+	return out
+}
+
 func main() {
 	start := time.Now()
 	storyIDs := generateStoryIDs()
-	processStory(storyIDs)
+	storyDetails := getStoryDetail(storyIDs)
+	processedStories := processStory(storyDetails)
 
-	// for story := range processedStories {
-	// 	log.Println("%v", story)
-	// }
+	for story := range processedStories {
+		log.Println("%v", story)
+	}
 	elapsed := time.Since(start)
 	log.Printf("Total seconds to finish - %s", elapsed)
 }
