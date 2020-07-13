@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/big"
 	"net/http"
 	"sync"
 	"time"
@@ -40,46 +39,69 @@ func generateStoryIDs() <-chan int {
 
 func getStoryDetail(in <-chan int) <-chan storyDetail {
 	out := make(chan storyDetail)
+	var wg sync.WaitGroup
+	const concurrency = 25 //Bounded Concurrency
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			getStoryDetailConcurrently(in, out)
+			wg.Done()
+		}()
+	}
 	go func() {
-		for storyID := range in {
-			story := storyDetail{}
-			resp, err := http.Get(fmt.Sprintf("https://hacker-news.firebaseio.com/v0/item/%d.json?print=pretty", storyID))
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			defer resp.Body.Close()
-
-			json.NewDecoder(resp.Body).Decode(&story)
-			out <- story
-		}
-		close(out)
-	}()
-	return out
-}
-
-func isPrime(number int) bool {
-	return big.NewInt(int64(number)).ProbablyPrime(number)
-}
-
-func processStory(in <-chan storyDetail) <-chan storyDetail {
-	out := make(chan storyDetail)
-	go func() {
-		wg := &sync.WaitGroup{}
-		for story := range in {
-			wg.Add(1)
-			go processStoryConcurrently(story, out, wg)
-		}
 		wg.Wait()
 		close(out)
 	}()
 	return out
 }
 
-func processStoryConcurrently(story storyDetail, output chan<- storyDetail, wg *sync.WaitGroup) {
-	story.IsPrime = isPrime(story.ID)
-	output <- story
-	wg.Done()
+func getStoryDetailConcurrently(in <-chan int, output chan<- storyDetail) {
+	for storyID := range in {
+		story := storyDetail{}
+		resp, err := http.Get(fmt.Sprintf("https://hacker-news.firebaseio.com/v0/item/%d.json", storyID))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		defer resp.Body.Close()
+
+		json.NewDecoder(resp.Body).Decode(&story)
+		output <- story
+	}
+}
+
+func isPrime(number int) bool {
+	for i := 2; i <= number/2; i++ {
+		if number%i == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func processStory(in <-chan storyDetail) <-chan storyDetail {
+	out := make(chan storyDetail)
+	var wg sync.WaitGroup
+	const concurrency = 10 //Bounded Concurrency
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			processStoryConcurrently(in, out)
+			wg.Done()
+		}()
+	}
+	go func() {
+		wg.Wait()
+		close(out)
+	}()
+	return out
+}
+
+func processStoryConcurrently(in <-chan storyDetail, output chan<- storyDetail) {
+	for story := range in {
+		story.IsPrime = isPrime(story.ID)
+		output <- story
+	}
 }
 
 func main() {
